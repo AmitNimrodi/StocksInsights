@@ -2,90 +2,109 @@ from datetime import date
 from constants import *
 import csv
 from datetime import datetime
+from dateutil.relativedelta import relativedelta
 from statistics import mean
 
 
-def calculate_five_years_from_date(d):
-    # Fix date day in order to fit %7 == 0
-    new_day = d.day-2 if d.day > 2 else d.day+5
-    return date(d.year+5, d.month, new_day)
+def calculate_five_years_from_date(dt):
+    # Add 5 years to the input datetime, considering leap years
+    new_datetime = dt + relativedelta(years=+5)
+    return new_datetime
 
 
 def calculate_five_years_first_of_month(d):
     return date(d.year + 5, 1, 1)
 
 
-def calculate_months_delta(first_d, second_d):
-    return 12 * (second_d.year - first_d.year) + (second_d.month - first_d.month)
+def calculate_months_delta(earlier_date, later_date):
+    return 12 * (later_date.year - earlier_date.year) + (later_date.month - earlier_date.month)
 
 
-def process_index_data(index_name):
-    data_dict = {}
-    calc_date = {SP500: calculate_five_years_first_of_month, NASDAQ: calculate_five_years_from_date}
-    with open(f'data/{index_name}.csv', mode='r', encoding="utf-8") as file:
-        reader = csv.reader(file)
-        for row in reader:
-            date = datetime.strptime(row[0], "%Y-%m-%d").date()
-            data_dict[date] = {
-                'index_rate': round(float(row[INDEX_RATE_COLUMN[index_name]]), DECIMAL_DIGITS),
-                'date_in_5_years': calc_date[index_name](date),
-                'percentage_change_in_5_years': None,
-                'first_100p_profit_date': None,
-                'months_to_100p_profit': None,
-            }
+def print_processed_data(index_name, insights):
+    total_days = insights[NUMBER_OF_TOTAL_DAYS]
+    earning_entry_points = insights[EARNING_ENTRY_POINTS]
+    at_least_100_percent_profit_days = insights[AT_LEAST_100_PERCENT_PROFIT_DAYS]
+    losing_entry_points = insights[LOSING_ENTRY_POINTS]
+    earning_days_percentage = insights[EARNING_DAYS_PERCENTAGE]
+    at_least_100_percent_profit_percentage = round(100 * (at_least_100_percent_profit_days / total_days), 2)
+    losing_days_percentage = insights[LOSING_DAYS_PERCENTAGE]
 
-    for date, data in data_dict.items():
-        date_in_5_years = data['date_in_5_years']
-        if date_in_5_years in data_dict:
-            percent = round(100 * data_dict[date_in_5_years]['index_rate'] / data['index_rate'],
-                            DECIMAL_DIGITS) - 100
-            data['percentage_change_in_5_years'] = percent
-        for otherDate in sorted(data_dict):
-            if otherDate > date and data_dict[otherDate]['index_rate'] / data['index_rate'] >= 2:
-                data['first_100p_profit_date'] = otherDate
-                data['months_to_100p_profit'] = calculate_months_delta(date, otherDate)
-                break
-
-    filtered_data_dict = {date: data for date, data in data_dict.items() if
-                          data_dict[date]['percentage_change_in_5_years'] is not None}
-    
-    date_and_percent_dict = {str(date): filtered_data_dict[date]['percentage_change_in_5_years'] for date in
-                             filtered_data_dict.keys()}
-    
-    number_of_total_days = len(filtered_data_dict)
-    earning_entry_points = sum(x > 0 for x in date_and_percent_dict.values())
-    losing_entry_points = sum(x < 0 for x in date_and_percent_dict.values())
-
-    earning_days_percentage = 100 * round(earning_entry_points / number_of_total_days, DECIMAL_DIGITS)
-    losing_days_percentage = 100 - earning_days_percentage
-
-    at_least_100_percent_profit_days = sum(x >= 100 for x in date_and_percent_dict.values())
-    ave_num_of_months_for_100p_profit = mean(
-        [data["months_to_100p_profit"] for data in data_dict.values() if data["months_to_100p_profit"]])
-    ave_percentage_change_in_5_years = mean(
-        [data["percentage_change_in_5_years"] for data in data_dict.values() if
-         data["percentage_change_in_5_years"]])
-    
-    print(f'-----Index name: {index_name} -----')
-    print('-----Entry points (days) data-----')
-    print(f'Total entry points (days) tested: {number_of_total_days}')
+    print(f'----- Index name: {index_name} -----')
+    print('----- Entry points (days) data -----')
+    print(f'Total entry points (days) tested: {total_days}')
     print(f'Earning entry points (days): {earning_entry_points}')
     print(f'Earning 100%+ Profit entry points: {at_least_100_percent_profit_days}')
     print(f'Losing entry points: {losing_entry_points}')
     print(f'Percentage: Earning: {earning_days_percentage}%')
-    print(f'Earning 100%+: {100 * round(at_least_100_percent_profit_days/number_of_total_days, DECIMAL_DIGITS)}%')
-    print(f'Losing: {losing_days_percentage}%')
-    print('\n')
+    print(f'Earning 100%+: {at_least_100_percent_profit_percentage}%')
+    print(f'Losing: {losing_days_percentage}%\n')
 
+
+def process_index_data(index_name):
+    data_dict = {}
+    calc_date_functions_dict = {SP500: calculate_five_years_first_of_month, NASDAQ: calculate_five_years_from_date}
+    file_name = f'data/{index_name}.csv'
+
+    with open(file_name, mode='r', encoding="utf-8") as file:
+        reader = csv.reader(file)
+        for row in reader:
+            date = datetime.strptime(row[0], "%Y-%m-%d").date()
+            data_dict[date] = {
+                INDEX_RATE: round(float(row[INDEX_RATE_COLUMN[index_name]]), DECIMAL_DIGITS),
+                DATE_IN_5_YEARS: calc_date_functions_dict[index_name](date),
+                PERCENTAGE_CHANGE_IN_5_YEARS: None,
+                FIRST_100P_PROFIT_DATE: None,
+                MONTHS_TO_100P_PROFIT: None,
+            }
+
+    # Calculate percentage change and profit dates
+    for date, data in data_dict.items():
+        date_in_5_years = data[DATE_IN_5_YEARS]
+        if date_in_5_years in data_dict:
+            index_rate_in_5_years = data_dict[date_in_5_years][INDEX_RATE]
+            index_rate_in_date = data[INDEX_RATE]
+            percent_change_in_5_years = round(100 * index_rate_in_5_years / index_rate_in_date, DECIMAL_DIGITS) - 100
+            data[PERCENTAGE_CHANGE_IN_5_YEARS] = percent_change_in_5_years
+
+        for other_date, other_data in data_dict.items():
+            if other_date > date and other_data[INDEX_RATE] / data[INDEX_RATE] >= 2:
+                data[FIRST_100P_PROFIT_DATE] = other_date
+                data[MONTHS_TO_100P_PROFIT] = calculate_months_delta(date, other_date)
+                break
+
+    # Filter data and calculate insights
+    filtered_data_dict = {date: data for date, data in data_dict.items() if data[PERCENTAGE_CHANGE_IN_5_YEARS] is not None}
+    date_and_percent_dict = {str(date): data[PERCENTAGE_CHANGE_IN_5_YEARS] for date, data in filtered_data_dict.items()}
+
+    number_of_total_days = len(filtered_data_dict)
+    earning_entry_points = sum(percentage > 0 for percentage in date_and_percent_dict.values())
+    losing_entry_points = number_of_total_days - earning_entry_points
+
+    earning_days_percentage = 100 * earning_entry_points / number_of_total_days
+    earning_days_percentage = round(earning_days_percentage, DECIMAL_DIGITS)
+
+    losing_days_percentage = 100 - earning_days_percentage
+    losing_days_percentage = round(losing_days_percentage, DECIMAL_DIGITS)
+
+    at_least_100_percent_profit_days = sum(percentage >= 100 for percentage in date_and_percent_dict.values())
+
+    avg_num_of_months_for_100p_profit = mean(data[MONTHS_TO_100P_PROFIT] for data in data_dict.values() if data[MONTHS_TO_100P_PROFIT])
+    avg_num_of_months_for_100p_profit = round(avg_num_of_months_for_100p_profit, DECIMAL_DIGITS)
+    
+    avg_percentage_change_in_5_years = mean(data[PERCENTAGE_CHANGE_IN_5_YEARS] for data in data_dict.values() if data[PERCENTAGE_CHANGE_IN_5_YEARS])
+    avg_percentage_change_in_5_years = round(avg_percentage_change_in_5_years, DECIMAL_DIGITS)
 
     insights = {
-        'num_total_days': number_of_total_days,
-        'earning_points': earning_entry_points,
-        'losing_points': losing_entry_points,
-        'earning_percent': earning_days_percentage,
-        'losing_percent': losing_days_percentage,
-        '100p_profit_days': at_least_100_percent_profit_days,
-        'ave_num_of_months_for_100p_profit': round(ave_num_of_months_for_100p_profit, DECIMAL_DIGITS),
-        'ave_percentage_change_in_5_years': round(ave_percentage_change_in_5_years, DECIMAL_DIGITS)
+        NUMBER_OF_TOTAL_DAYS: number_of_total_days,
+        EARNING_ENTRY_POINTS: earning_entry_points,
+        LOSING_ENTRY_POINTS: losing_entry_points,
+        EARNING_DAYS_PERCENTAGE: earning_days_percentage,
+        LOSING_DAYS_PERCENTAGE: losing_days_percentage,
+        AT_LEAST_100_PERCENT_PROFIT_DAYS: at_least_100_percent_profit_days,
+        AVG_NUM_OF_MONTHS_FOR_100P_PROFIT: avg_num_of_months_for_100p_profit,
+        AVG_PERCENTAGE_CHANGE_IN_5_YEARS: avg_percentage_change_in_5_years
     }
+
+    print_processed_data(index_name, insights)
+
     return data_dict, insights
