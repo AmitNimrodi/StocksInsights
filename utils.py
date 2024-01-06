@@ -1,7 +1,7 @@
 from datetime import date
 from constants import *
 import csv
-from datetime import datetime
+from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 from statistics import mean
 
@@ -60,6 +60,11 @@ def process_index_data(index_name):
     # Calculate percentage change and profit dates
     for date, data in data_dict.items():
         date_in_5_years = data[DATE_IN_5_YEARS]
+        # This variable is intended to fix cases where date_in_5_years is not a trading day
+        date_normalizer = 1 
+        while(date_in_5_years not in data_dict and date_normalizer < WEEK):
+            date_in_5_years = date_in_5_years + timedelta(days = date_normalizer)        
+            date_normalizer += 1
         if date_in_5_years in data_dict:
             index_rate_in_5_years = data_dict[date_in_5_years][INDEX_RATE]
             index_rate_in_date = data[INDEX_RATE]

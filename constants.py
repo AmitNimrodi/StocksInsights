@@ -1,6 +1,7 @@
 # Numeric constants
 FIVE_YEARS_DAYS = 5 * 365
 DECIMAL_DIGITS = 2
+WEEK = 7
 
 # Strings
 NASDAQ = 'nasdaq'
